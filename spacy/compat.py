@@ -47,6 +47,7 @@ CudaStream = CudaStream
 cupy = cupy
 copy_array = copy_array
 izip = getattr(itertools, "izip", zip)
+imap = getattr(itertools, "imap", map)
 
 is_windows = sys.platform.startswith("win")
 is_linux = sys.platform.startswith("linux")

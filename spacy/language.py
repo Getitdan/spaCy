@@ -21,7 +21,7 @@ from .vocab import Vocab
 from .lemmatizer import Lemmatizer
 from .lookups import Lookups
 from .analysis import analyze_pipes, analyze_all_pipes, validate_attrs
-from .compat import izip, basestring_, is_python2, class_types
+from .compat import izip, imap, basestring_, is_python2, class_types
 from .gold import GoldParse
 from .scorer import Scorer
 from ._ml import link_vectors_to_models, create_default_optimizer
@@ -418,7 +418,7 @@ class Language(object):
             analyze_all_pipes(self.pipeline)
         return removed
 
-    def __call__(self, text, disable=[], component_cfg=None):
+    def __call__(self, text, disable=[], component_cfg=None, text_meta=None):
         """Apply the pipeline to some text. The text can span multiple sentences,
         and can contain arbitrary whitespace. Alignment into the original string
         is preserved.
@@ -427,6 +427,8 @@ class Language(object):
         disable (list): Names of the pipeline components to disable.
         component_cfg (dict): An optional dictionary with extra keyword arguments
             for specific components.
+        text_meta (dict): An optional dictionary of meta data to be
+            processed with the text.
         RETURNS (Doc): A container for accessing the annotations.
 
         DOCS: https://spacy.io/api/language#call
@@ -438,6 +440,9 @@ class Language(object):
         doc = self.make_doc(text)
         if component_cfg is None:
             component_cfg = {}
+        if text_meta is None:
+            text_meta = {}
+        doc = self._doc_with_text_meta(doc, text_meta)
         for name, proc in self.pipeline:
             if name in disable:
                 continue
@@ -744,6 +749,8 @@ class Language(object):
         disable=[],
         cleanup=False,
         component_cfg=None,
+        texts_meta=None,
+        use_tuples_as_texts_meta=False,
         n_process=1,
     ):
         """Process texts as a stream, and yield `Doc` objects in order.
@@ -758,6 +765,11 @@ class Language(object):
             use. Experimental.
         component_cfg (dict): An optional dictionary with extra keyword
             arguments for specific components.
+        texts_meta (iterator): An optional sequence of meta data to be
+            processed with the input texts.
+        use_tuples_as_texts_meta (bool): If set to True, the contexts of the
+            tuples of the inputs would be passed to `texts_meta` option.
+            `as_tuples` option must be set to True.
         n_process (int): Number of processors to process texts, only supported
             in Python3. If -1, set `multiprocessing.cpu_count()`.
         YIELDS (Doc): Documents in the order of the original text.
@@ -772,15 +784,18 @@ class Language(object):
         if n_process == -1:
             n_process = mp.cpu_count()
         if as_tuples:
-            text_context1, text_context2 = itertools.tee(texts)
+            text_context1, text_context2, text_context3 = itertools.tee(texts, 3)
             texts = (tc[0] for tc in text_context1)
             contexts = (tc[1] for tc in text_context2)
+            if use_tuples_as_texts_meta:
+                texts_meta = (tc[1] for tc in text_context3)
             docs = self.pipe(
                 texts,
                 batch_size=batch_size,
                 disable=disable,
                 n_process=n_process,
                 component_cfg=component_cfg,
+                texts_meta=texts_meta
             )
             for doc, context in izip(docs, contexts):
                 yield (doc, context)
@@ -809,6 +824,8 @@ class Language(object):
         else:
             # if n_process == 1, no processes are forked.
             docs = (self.make_doc(text) for text in texts)
+            if texts_meta:
+                docs = imap(self._doc_with_text_meta, docs, texts_meta)
             for pipe in pipes:
                 docs = pipe(docs)
 
@@ -841,6 +858,11 @@ class Language(object):
                         self.vocab._reset_cache(keys, strings)
                         self.tokenizer._reset_cache(keys)
                     nr_seen = 0
+
+    @staticmethod
+    def _doc_with_text_meta(doc, text_meta):
+        doc.text_meta = text_meta
+        return doc
 
     def _multiprocessing_pipe(self, texts, pipes, n_process, batch_size):
         # raw_texts is used later to stop iteration.

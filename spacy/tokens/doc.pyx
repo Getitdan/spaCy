@@ -172,7 +172,7 @@ cdef class Doc:
             raise ValueError(Errors.E046.format(name=name))
         return Underscore.doc_extensions.pop(name)
 
-    def __init__(self, Vocab vocab, words=None, spaces=None, user_data=None,
+    def __init__(self, Vocab vocab, words=None, spaces=None, user_data=None, text_meta=None,
                  orths_and_spaces=None):
         """Create a Doc object.
 
@@ -184,6 +184,7 @@ cdef class Doc:
             words. True means that the word is followed by a space, False means
             it is not. If `None`, defaults to `[True]*len(words)`
         user_data (dict or None): Optional extra data to attach to the Doc.
+        text_meta (dict or None): Optional meta data to attach to the Doc.
         RETURNS (Doc): The newly constructed object.
 
         DOCS: https://spacy.io/api/doc#init
@@ -212,6 +213,7 @@ cdef class Doc:
         self.user_span_hooks = {}
         self.tensor = numpy.zeros((0,), dtype="float32")
         self.user_data = {} if user_data is None else user_data
+        self.text_meta = {} if text_meta is None else text_meta
         self._vector = None
         self.noun_chunks_iterator = _get_chunker(self.vocab.lang)
         cdef unicode orth
